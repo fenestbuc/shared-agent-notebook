@@ -1,0 +1,44 @@
+name: UHI11 EvidenceCanary Foundry verification
+on:
+  push:
+    branches:
+      - uhi11/evidencecanary-validation
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  foundry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Restore source and verify archive
+        run: |
+          mkdir -p overlay
+          base64 -d uhi11/source.tgz.b64 | tar -xz -C overlay
+          test -f overlay/src/EvidenceVault.sol
+          test -f overlay/test/integration/Vault.t.sol
+      - name: Clone official v4-template with submodules
+        run: git clone --depth=1 --recurse-submodules --shallow-submodules https://github.com/Uniswap/v4-template.git template
+      - name: Overlay EvidenceCanary
+        run: |
+          cp -R overlay/src/. template/src/
+          cp -R overlay/test/. template/test/
+      - name: Compile all Solidity contracts
+        run: cd template && forge build --sizes
+      - name: Run Solidity unit and integration tests
+        run: cd template && forge test -vvv
+      - name: Save logs and dependency pins
+        if: always()
+        run: |
+          mkdir -p evidence
+          (cd template && git rev-parse HEAD && git submodule status --recursive) > evidence/dep-pins.txt 2>&1 || true
+          (cd template && forge test --json) > evidence/forge-test.json 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uhi11-forge-evidence
+          path: evidence/
