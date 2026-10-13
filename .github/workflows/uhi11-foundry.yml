@@ -1,0 +1,32 @@
+name: UHI11 isolated Foundry verification
+on:
+  push:
+    branches: [uhi11/evidencecanary-validation]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Recover submitted isolated source
+        run: |
+          mkdir -p work
+          base64 -d uhi11/source.tgz.b64 | tar -xz -C work
+      - name: Clone current v4 official fixture
+        run: git clone --recurse-submodules https://github.com/Uniswap/v4-template.git base
+      - name: Copy submitted contracts/tests
+        run: |
+          cp -R work/src/. base/src/
+          cp -R work/test/unit/. base/test/
+          cp -R work/test/unit/. base/test/unit/
+          mkdir -p base/test/integration
+          cp -R work/test/integration/. base/test/integration/ || true
+      - name: Foundry compile
+        run: forge build --root base --sizes
+      - name: Foundry tests
+        run: forge test --root base -vvv
